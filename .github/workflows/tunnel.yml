@@ -9,15 +9,90 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - run: |
+      - env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+        run: |
           set -e
-          echo Decoding relay...
-          echo CmNvbnN0IGh0dHAgPSByZXF1aXJlKCdodHRwJyk7CmNvbnN0IGh0dHBzID0gcmVxdWlyZSgnaHR0cHMnKTsKY29uc3QgR0lTVF9JRCA9IHByb2Nlc3MuZW52LkdJU1RfSUQ7CmNvbnN0IEdIX1RPS0VOID0gcHJvY2Vzcy5lbnYuR0hfVE9LRU47CmNvbnN0IFBPUlQgPSA4ODg4OwpsZXQgcGVuZGluZyA9IHt9OwpmdW5jdGlvbiBnaEFwaShtZXRob2QsIHBhdGgsIGRhdGEpIHsKICByZXR1cm4gbmV3IFByb21pc2UoKHJlc29sdmUsIHJlamVjdCkgPT4gewogICAgY29uc3Qgb3B0cyA9IHsgaG9zdG5hbWU6ICdhcGkuZ2l0aHViLmNvbScsIHBhdGgsIG1ldGhvZCwgaGVhZGVyczogewogICAgICAnQXV0aG9yaXphdGlvbic6IGB0b2tlbiAke0dIX1RPS0VOfWAsCiAgICAgICdBY2NlcHQnOiAnYXBwbGljYXRpb24vdm5kLmdpdGh1Yi52Mytqc29uJywKICAgICAgJ1VzZXItQWdlbnQnOiAndHVubmVsLXJlbGF5LzEuMCcsCiAgICAgICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbicKICAgIH19OwogICAgY29uc3QgcmVxID0gaHR0cHMucmVxdWVzdChvcHRzLCAocmVzKSA9PiB7CiAgICAgIGxldCBib2R5ID0gJyc7CiAgICAgIHJlcy5vbignZGF0YScsIGMgPT4gYm9keSArPSBjKTsKICAgICAgcmVzLm9uKCdlbmQnLCAoKSA9PiB7IHRyeSB7IHJlc29sdmUoSlNPTi5wYXJzZShib2R5KSk7IH0gY2F0Y2ggeyByZXNvbHZlKGJvZHkpOyB9IH0pOwogICAgfSk7CiAgICByZXEub24oJ2Vycm9yJywgcmVqZWN0KTsKICAgIGlmIChkYXRhKSByZXEud3JpdGUoSlNPTi5zdHJpbmdpZnkoZGF0YSkpOwogICAgcmVxLmVuZCgpOwogIH0pOwp9CmFzeW5jIGZ1bmN0aW9uIGdldFN0YXRlKCkgewogIGNvbnN0IGdpc3QgPSBhd2FpdCBnaEFwaSgnR0VUJywgJy9naXN0cy8nICsgR0lTVF9JRCk7CiAgdHJ5IHsgcmV0dXJuIEpTT04ucGFyc2UoZ2lzdC5maWxlcy5xLmNvbnRlbnQpOyB9IGNhdGNoIHsgcmV0dXJuIHt9OyB9Cn0KYXN5bmMgZnVuY3Rpb24gc2V0U3RhdGUoc3RhdGUpIHsKICBhd2FpdCBnaEFwaSgnUEFUQ0gnLCAnL2dpc3RzLycgKyBHSVNUX0lELCB7IGZpbGVzOiB7IHE6IHsgY29udGVudDogSlNPTi5zdHJpbmdpZnkoc3RhdGUpIH0gfSB9KTsKfQphc3luYyBmdW5jdGlvbiBwb2xsTG9vcCgpIHsKICB3aGlsZSAodHJ1ZSkgewogICAgdHJ5IHsKICAgICAgY29uc3Qgc3RhdGUgPSBhd2FpdCBnZXRTdGF0ZSgpOwogICAgICBsZXQgY2hhbmdlZCA9IGZhbHNlOwogICAgICBmb3IgKGNvbnN0IGtleSBvZiBPYmplY3Qua2V5cyhzdGF0ZSkpIHsKICAgICAgICBpZiAoa2V5LnN0YXJ0c1dpdGgoJ3Jlc3BfJykpIHsKICAgICAgICAgIGNvbnN0IHJlcUlkID0ga2V5LnNsaWNlKDUpOwogICAgICAgICAgaWYgKHBlbmRpbmdbcmVxSWRdKSB7CiAgICAgICAgICAgIHBlbmRpbmdbcmVxSWRdLnJlc29sdmUoc3RhdGVba2V5XSk7CiAgICAgICAgICAgIGRlbGV0ZSBwZW5kaW5nW3JlcUlkXTsKICAgICAgICAgICAgZGVsZXRlIHN0YXRlW2tleV07CiAgICAgICAgICAgIGNoYW5nZWQgPSB0cnVlOwogICAgICAgICAgfQogICAgICAgIH0KICAgICAgfQogICAgICBpZiAoY2hhbmdlZCkgYXdhaXQgc2V0U3RhdGUoc3RhdGUpOwogICAgfSBjYXRjaChlKSB7fQogICAgYXdhaXQgbmV3IFByb21pc2UociA9PiBzZXRUaW1lb3V0KHIsIDIwMCkpOwogIH0KfQpjb25zdCBzZXJ2ZXIgPSBodHRwLmNyZWF0ZVNlcnZlcigocmVxLCByZXNwKSA9PiB7CiAgY29uc3QgcmVxSWQgPSBEYXRlLm5vdygpICsgJ18nICsgTWF0aC5yYW5kb20oKS50b1N0cmluZygzNikuc2xpY2UoMiw2KTsKICBsZXQgYm9keSA9IFtdOwogIHJlcS5vbignZGF0YScsIGMgPT4gYm9keS5wdXNoKGMpKTsKICByZXEub24oJ2VuZCcsIGFzeW5jICgpID0+IHsKICAgIGNvbnN0IGJvZHlCdWYgPSBCdWZmZXIuY29uY2F0KGJvZHkpOwogICAgY29uc3QgcmVxRGF0YSA9IHsgbWV0aG9kOiByZXEubWV0aG9kLCBwYXRoOiByZXEudXJsLCBoZWFkZXJzOiByZXEuaGVhZGVycywgYm9keTogYm9keUJ1Zi50b1N0cmluZygnYmFzZTY0JykgfTsKICAgIGNvbnNvbGUubG9nKCc+Pj4gJyArIHJlcS5tZXRob2QgKyAnICcgKyByZXEudXJsKTsKICAgIHRyeSB7CiAgICAgIGNvbnN0IHN0YXRlID0gYXdhaXQgZ2V0U3RhdGUoKTsKICAgICAgc3RhdGVbJ3JlcV8nICsgcmVxSWRdID0gcmVxRGF0YTsKICAgICAgYXdhaXQgc2V0U3RhdGUoc3RhdGUpOwogICAgICBjb25zdCByZXN1bHQgPSBhd2FpdCBuZXcgUHJvbWlzZSgocmVzb2x2ZSwgcmVqZWN0KSA9PiB7CiAgICAgICAgY29uc3QgdGltZW91dCA9IHNldFRpbWVvdXQoKCkgPT4gcmVzb2x2ZSh7Y29kZTo1MDQsaGVhZGVyczp7fSxib2R5OicnfSksIDI4MDAwKTsKICAgICAgICBwZW5kaW5nW3JlcUlkXSA9IHsgcmVzb2x2ZSwgcmVqZWN0IH07CiAgICAgIH0pOwogICAgICByZXNwLndyaXRlSGVhZChyZXN1bHQuY29kZSB8fCA1MDIsIHJlc3VsdC5oZWFkZXJzIHx8IHt9KTsKICAgICAgcmVzcC5lbmQoQnVmZmVyLmZyb20ocmVzdWx0LmJvZHkgfHwgJycsICdiYXNlNjQnKSk7CiAgICAgIGNvbnNvbGUubG9nKCc8PDwgJyArIChyZXN1bHQuY29kZSB8fCA1MDIpKTsKICAgIH0gY2F0Y2goZSkgewogICAgICByZXNwLndyaXRlSGVhZCg1MDIpOwogICAgICByZXNwLmVuZCgncmVsYXkgZXJyb3InKTsKICAgIH0KICB9KTsKfSk7CnNlcnZlci5saXN0ZW4oUE9SVCwgKCkgPT4geyBjb25zb2xlLmxvZygncmVsYXkgb24gJyArIFBPUlQpOyBwb2xsTG9vcCgpOyB9KTsK | base64 -d > /tmp/relay.js
-          echo Starting relay...
+          JS_CODE=$(cat << 'JSEOF'
+const http = require('http');
+const https = require('https');
+const GID = process.env.GIST_ID;
+const TOK = process.env.GH_TOKEN;
+const PORT = 8888;
+let pending = {};
+function api(m, p, d) {
+  return new Promise((res, rej) => {
+    const o = { hostname: 'api.github.com', path: p, method: m, headers: {
+      'Authorization': 'token ' + TOK,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'relay/1.0', 'Content-Type': 'application/json'
+    }};
+    const r = https.request(o, (resp) => {
+      let b = '';
+      resp.on('data', c => b += c);
+      resp.on('end', () => { try { res(JSON.parse(b)); } catch { res(b); } });
+    });
+    r.on('error', rej);
+    if (d) r.write(JSON.stringify(d));
+    r.end();
+  });
+}
+async function getS() {
+  const g = await api('GET', '/gists/' + GID);
+  try { return JSON.parse(g.files.q.content); } catch { return {}; }
+}
+async function setS(s) {
+  await api('PATCH', '/gists/' + GID, { files: { q: { content: JSON.stringify(s) } } });
+}
+async function poll() {
+  while (true) {
+    try {
+      const s = await getS();
+      let c = false;
+      for (const k of Object.keys(s)) {
+        if (k.startsWith('resp_')) {
+          const id = k.slice(5);
+          if (pending[id]) { pending[id].resolve(s[k]); delete pending[id]; delete s[k]; c = true; }
+        }
+      }
+      if (c) await setS(s);
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 200));
+  }
+}
+const srv = http.createServer((req, resp) => {
+  const id = Date.now() + '_' + Math.random().toString(36).slice(2,6);
+  let body = [];
+  req.on('data', c => body.push(c));
+  req.on('end', async () => {
+    const buf = Buffer.concat(body);
+    const rd = { method: req.method, path: req.url, headers: req.headers, body: buf.toString('base64') };
+    try {
+      const s = await getS();
+      s['req_' + id] = rd;
+      await setS(s);
+      const r = await new Promise((res, rej) => {
+        const to = setTimeout(() => res({code:504,headers:{},body:''}), 28000);
+        pending[id] = { resolve: res, reject: rej };
+      });
+      resp.writeHead(r.code || 502, r.headers || {});
+      resp.end(Buffer.from(r.body || '', 'base64'));
+    } catch(e) { resp.writeHead(502); resp.end('err'); }
+  });
+});
+srv.listen(PORT, () => { poll(); });
+JSEOF
+)
+          echo "$JS_CODE" > /tmp/relay.js
           node /tmp/relay.js &
-          RELAY_PID=$!
-          echo Connecting to serveo.net...
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 80:localhost:8888 serveo.net 2>&1 &
-          sleep 10
-          echo Running...
-          wait
+          sleep 3
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 80:localhost:8888 serveo.net 2>&1 |             while read line; do
+              echo "$line"
+              URL=$(echo "$line" | grep -oP 'https?://\S+[a-zA-Z0-9]')
+              if [ -n "$URL" ]; then
+                echo "Got URL: $URL"
+                curl -s -X PATCH -H "Authorization: token $GH_TOKEN"                   -H "Accept: application/vnd.github.v3+json"                   "https://api.github.com/gists/$GIST_ID"                   -d "$(python3 -c "import json; print(json.dumps({'files':{'q':{'content':json.dumps({'url':'$URL'})}}}))")"
+                echo " URL saved to gist"
+              fi
+            done
