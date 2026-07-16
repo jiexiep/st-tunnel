@@ -1,98 +1,116 @@
 name: HTTP Tunnel Relay
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '*/3 * * * *'
 
 jobs:
   relay:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - env:
+      - run: |
+          set -e
+          pip install -q flask
+          cat > /tmp/relay.py << 'PYEOF2'
+import json, os, base64, threading, time
+from flask import Flask, request, Response
+import urllib.request, urllib.error
+
+GIST_ID = os.environ['GIST_ID']
+GH_TOKEN = os.environ['GH_TOKEN']
+app = Flask(__name__)
+
+def gh_api(method, path, data=None):
+    url = 'https://api.github.com' + path
+    headers = {
+        'Authorization': 'token ' + GH_TOKEN,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'relay/1.0', 'Content-Type': 'application/json'
+    }
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read())
+    except: return {}
+
+p = {}
+def poll():
+    while True:
+        try:
+            g = gh_api('GET', '/gists/' + GIST_ID)
+            s = json.loads(g.get('files',{}).get('q',{}).get('content','{}'))
+            ok = False
+            for k in list(s.keys()):
+                if k.startswith('resp_'):
+                    rid = k[5:]
+                    if rid in p:
+                        p[rid](s[k])
+                        del p[rid]
+                        del s[k]
+                        ok = True
+            if ok: gh_api('PATCH', '/gists/' + GIST_ID, json.dumps({'files':{'q':{'content':json.dumps(s)}}}).encode())
+        except: pass
+        time.sleep(0.2)
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>', methods=['GET','POST','PUT','DELETE','PATCH','HEAD','OPTIONS'])
+def proxy(path):
+    import http.client
+    rid = str(int(time.time()*1000)) + '_' + base64.b64encode(os.urandom(3)).decode()
+    body = request.get_data()
+    rd = {
+        'method': request.method,
+        'path': '/' + path,
+        'headers': dict(request.headers),
+        'body': base64.b64encode(body).decode() if body else ''
+    }
+    try:
+        s = gh_api('GET', '/gists/' + GIST_ID)
+        s['req_' + rid] = rd
+        gh_api('PATCH', '/gists/' + GIST_ID, json.dumps({'files':{'q':{'content':json.dumps(s)}}}).encode())
+        result = None
+        ev = threading.Event()
+        def cb(r):
+            nonlocal result
+            result = r
+            ev.set()
+        p[rid] = cb
+        if not ev.wait(timeout=28):
+            return Response('timeout', status=504)
+        resp_headers = {k:v for k,v in result.get('headers',{}).items() if k.lower() not in ('transfer-encoding','content-encoding')}
+        return Response(base64.b64decode(result.get('body','')), status=result.get('code',502), headers=resp_headers)
+    except Exception as e:
+        return Response('error: ' + str(e), status=502)
+
+t = threading.Thread(target=poll, daemon=True)
+t.start()
+app.run(host='0.0.0.0', port=8888, threaded=True)
+PYEOF2
+          cat > /tmp/ssh_tunnel.sh << 'SH'
+#!/bin/bash
+ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 80:localhost:8888 serveo.net 2>&1 | while read line; do
+  echo "$line"
+  URL=$(echo "$line" | grep -oP 'https?://\S+[a-zA-Z0-9/]')
+  if [ -n "$URL" ]; then
+    echo "URL=$URL"
+    python3 -c "
+import json, urllib.request
+data = json.dumps({'files':{'q':{'content':json.dumps({'url':'$URL'})}}}).encode()
+req = urllib.request.Request('https://api.github.com/gists/${{ secrets.GIST_ID }}',
+  data=data, headers={
+    'Authorization': 'token ${{ secrets.GH_TOKEN }}',
+    'Content-Type': 'application/json',
+    'User-Agent': 'relay'
+  }, method='PATCH')
+urllib.request.urlopen(req)
+"
+    echo "Written URL to gist"
+  fi
+done
+SH
+          chmod +x /tmp/ssh_tunnel.sh
+          PYTHONUNBUFFERED=1 python3 /tmp/relay.py &
+          sleep 3
+          /tmp/ssh_tunnel.sh
+        env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
-        run: |
-          set -e
-          JS_CODE=$(cat << 'JSEOF'
-const http = require('http');
-const https = require('https');
-const GID = process.env.GIST_ID;
-const TOK = process.env.GH_TOKEN;
-const PORT = 8888;
-let pending = {};
-function api(m, p, d) {
-  return new Promise((res, rej) => {
-    const o = { hostname: 'api.github.com', path: p, method: m, headers: {
-      'Authorization': 'token ' + TOK,
-      'Accept': 'application/vnd.github.v3+json',
-      'User-Agent': 'relay/1.0', 'Content-Type': 'application/json'
-    }};
-    const r = https.request(o, (resp) => {
-      let b = '';
-      resp.on('data', c => b += c);
-      resp.on('end', () => { try { res(JSON.parse(b)); } catch { res(b); } });
-    });
-    r.on('error', rej);
-    if (d) r.write(JSON.stringify(d));
-    r.end();
-  });
-}
-async function getS() {
-  const g = await api('GET', '/gists/' + GID);
-  try { return JSON.parse(g.files.q.content); } catch { return {}; }
-}
-async function setS(s) {
-  await api('PATCH', '/gists/' + GID, { files: { q: { content: JSON.stringify(s) } } });
-}
-async function poll() {
-  while (true) {
-    try {
-      const s = await getS();
-      let c = false;
-      for (const k of Object.keys(s)) {
-        if (k.startsWith('resp_')) {
-          const id = k.slice(5);
-          if (pending[id]) { pending[id].resolve(s[k]); delete pending[id]; delete s[k]; c = true; }
-        }
-      }
-      if (c) await setS(s);
-    } catch(e) {}
-    await new Promise(r => setTimeout(r, 200));
-  }
-}
-const srv = http.createServer((req, resp) => {
-  const id = Date.now() + '_' + Math.random().toString(36).slice(2,6);
-  let body = [];
-  req.on('data', c => body.push(c));
-  req.on('end', async () => {
-    const buf = Buffer.concat(body);
-    const rd = { method: req.method, path: req.url, headers: req.headers, body: buf.toString('base64') };
-    try {
-      const s = await getS();
-      s['req_' + id] = rd;
-      await setS(s);
-      const r = await new Promise((res, rej) => {
-        const to = setTimeout(() => res({code:504,headers:{},body:''}), 28000);
-        pending[id] = { resolve: res, reject: rej };
-      });
-      resp.writeHead(r.code || 502, r.headers || {});
-      resp.end(Buffer.from(r.body || '', 'base64'));
-    } catch(e) { resp.writeHead(502); resp.end('err'); }
-  });
-});
-srv.listen(PORT, () => { poll(); });
-JSEOF
-)
-          echo "$JS_CODE" > /tmp/relay.js
-          node /tmp/relay.js &
-          sleep 3
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 80:localhost:8888 serveo.net 2>&1 |             while read line; do
-              echo "$line"
-              URL=$(echo "$line" | grep -oP 'https?://\S+[a-zA-Z0-9]')
-              if [ -n "$URL" ]; then
-                echo "Got URL: $URL"
-                curl -s -X PATCH -H "Authorization: token $GH_TOKEN"                   -H "Accept: application/vnd.github.v3+json"                   "https://api.github.com/gists/$GIST_ID"                   -d "$(python3 -c "import json; print(json.dumps({'files':{'q':{'content':json.dumps({'url':'$URL'})}}}))")"
-                echo " URL saved to gist"
-              fi
-            done
