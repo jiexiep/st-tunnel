@@ -62,29 +62,54 @@ http.createServer((q,w) => {
 }).listen(port, '0.0.0.0', () => {
   console.log('relay on 0.0.0.0:'+port);
   
-  const cfPath = '/tmp/cloudflared';
-  if (fs.existsSync(cfPath)) {
-    setTimeout(() => {
-      const cf = spawn(cfPath, ['tunnel', '--url', 'http://localhost:'+port], {stdio:['ignore','pipe','pipe']});
-      cf.stdout.on('data', d => {
-        const s = d.toString();
-        process.stdout.write(s);
-        const m = s.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
-        if (m) {
-          const url = m[0];
-          console.log('CF URL:', url);
-          api('GET','/gists/'+gid).then(async g => {
-            try {
-              const state = JSON.parse(g.files.q.content);
-              state.url = url;
-              await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(state)}}});
-              console.log('CF URL written');
-            } catch(e) {}
-          });
-        }
-      });
-      cf.stderr.on('data', d => process.stderr.write(d));
-      cf.on('exit', c => console.log('cf exit:', c));
-    }, 500);
-  }
+  // Try localhost.run
+  setTimeout(() => {
+    const ssh = spawn('ssh', [
+      '-o','StrictHostKeyChecking=no',
+      '-o','ServerAliveInterval=30',
+      '-o','ConnectTimeout=10',
+      '-R','80:localhost:'+port,
+      'nokey@localhost.run'
+    ], {stdio:['ignore','pipe','pipe']});
+    
+    let output = '';
+    ssh.stdout.on('data', d => {
+      const s = d.toString();
+      output += s;
+      process.stdout.write(s);
+      // localhost.run prints URL like "https://xxx.lhr.life" or "https://xxx.localhost.run"
+      const m = output.match(/https:\/\/\S+/);
+      if (m) {
+        const url = m[0].replace(/[^a-zA-Z0-9:\/.-]/g,'');
+        console.log('TUNNEL URL:', url);
+        api('GET','/gists/'+gid).then(async g => {
+          try {
+            const state = JSON.parse(g.files.q.content);
+            state.url = url;
+            await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(state)}}});
+            console.log('URL written');
+          } catch(e) {}
+        });
+      }
+    });
+    ssh.stderr.on('data', d => {
+      const s = d.toString();
+      process.stderr.write(s);
+      output += s;
+      const m = output.match(/https:\/\/\S+/);
+      if (m) {
+        const url = m[0].replace(/[^a-zA-Z0-9:\/.-]/g,'');
+        console.log('TUNNEL URL:', url);
+        api('GET','/gists/'+gid).then(async g => {
+          try {
+            const state = JSON.parse(g.files.q.content);
+            state.url = url;
+            await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(state)}}});
+            console.log('URL written');
+          } catch(e) {}
+        });
+      }
+    });
+    ssh.on('exit', c => console.log('ssh exit:', c));
+  }, 1000);
 });
