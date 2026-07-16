@@ -1,10 +1,19 @@
-name: Test Tunnel
+name: Tunnel
 on: [workflow_dispatch]
 
 jobs:
-  test:
+  run:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: check
-        run: echo "hello" && echo test > /tmp/test.txt
+      - uses: actions/checkout@v4
+      - run: |
+          node relay.js &
+          sleep 3
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 80:localhost:8888 serveo.net 2>&1 > /tmp/ssh.log &
+          sleep 10
+          cat /tmp/ssh.log
+          wait
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
