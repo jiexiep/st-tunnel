@@ -1,10 +1,12 @@
 
 const http = require('http');
 const https = require('https');
+const { spawn } = require('child_process');
 const gid = process.env.GIST_ID;
 const tok = process.env.GH_TOKEN;
 const port = 8888;
 let pending = {};
+
 function api(m, p, d) {
   return new Promise((r,j) => {
     const o = {hostname:'api.github.com',path:p,method:m,
@@ -15,6 +17,7 @@ function api(m, p, d) {
 }
 async function gs() { const g=await api('GET','/gists/'+gid); try{return JSON.parse(g.files.q.content)}catch{return{}} }
 async function ss(s) { await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(s)}}}) }
+
 async function pl() {
   while(1) {
     try {
@@ -25,6 +28,36 @@ async function pl() {
     await new Promise(r=>setTimeout(r,200));
   }
 }
+
+// Start serveo SSH tunnel
+const ssh = spawn('ssh', [
+  '-o','StrictHostKeyChecking=no',
+  '-o','ServerAliveInterval=30',
+  '-o','ConnectTimeout=10',
+  '-R','80:localhost:'+port,
+  'serveo.net'
+], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+ssh.stdout.on('data', d => {
+  const s = d.toString();
+  console.log('SSH:', s);
+  const m = s.match(/https?:\/\/\S+[a-zA-Z0-9/]/);
+  if (m) {
+    const url = m[0];
+    console.log('GOT URL:', url);
+    api('GET','/gists/'+gid).then(async g => {
+      try {
+        const state = JSON.parse(g.files.q.content);
+        state.url = url;
+        await ss(state);
+        console.log('URL written to gist');
+      } catch(e) { console.error('write err', e.message); }
+    });
+  }
+});
+ssh.stderr.on('data', d => console.error('SSH-ERR:', d.toString()));
+ssh.on('exit', c => console.log('SSH exit:', c));
+
 http.createServer((q,w) => {
   let b=[]; q.on('data',c=>b.push(c));
   q.on('end',async()=>{
@@ -37,4 +70,4 @@ http.createServer((q,w) => {
       w.writeHead(r.code||502,r.headers||{}); w.end(Buffer.from(r.body||'','base64'));
     } catch(e) { w.writeHead(502); w.end('err'); }
   });
-}).listen(port,()=>{console.log('ok');pl()});
+}).listen(port,()=>{console.log('relay on '+port);pl()});
