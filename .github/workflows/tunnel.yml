@@ -4,16 +4,10 @@ on: [workflow_dispatch]
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          node relay.js &
-          sleep 3
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 80:localhost:8888 serveo.net 2>&1 > /tmp/ssh.log &
-          sleep 10
-          cat /tmp/ssh.log
-          wait
+      - run: node relay.js
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
