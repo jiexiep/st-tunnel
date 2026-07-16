@@ -1,11 +1,11 @@
 
 const http = require('http');
 const https = require('https');
-const { spawn, execSync } = require('child_process');
+const { spawn } = require('child_process');
+const fs = require('fs');
 const gid = process.env.GIST_ID;
 const tok = process.env.GH_TOKEN;
 const port = 8888;
-
 let pending = {};
 
 function api(m, p, d) {
@@ -32,7 +32,7 @@ async function tick() {
   } catch(e) {}
 }
 
-setInterval(tick, 300);
+setInterval(tick, 500);
 
 http.createServer((q,w) => {
   let b=[]; q.on('data',c=>b.push(c));
@@ -59,36 +59,40 @@ http.createServer((q,w) => {
       w.writeHead(502); w.end(e.message);
     }
   });
-}).listen(port, '0.0.0.0', async () => {
+}).listen(port, '0.0.0.0', () => {
   console.log('relay on 0.0.0.0:'+port);
   
-  // Install & run cloudflared
-  try {
-    execSync('which cloudflared || (curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared && chmod +x /tmp/cloudflared)', {stdio:'inherit', timeout:30000});
-    console.log('cloudflared ready');
-    
-    const cf = spawn('/tmp/cloudflared', ['tunnel', '--url', 'http://localhost:'+port], {stdio:['ignore','pipe','pipe']});
-    
-    cf.stdout.on('data', d => {
-      const s = d.toString();
-      process.stdout.write(s);
-      const m = s.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
-      if (m) {
-        const url = m[0];
-        console.log('CF URL:', url);
-        api('GET','/gists/'+gid).then(async g => {
-          try {
-            const state = JSON.parse(g.files.q.content);
-            state.url = url;
-            await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(state)}}});
-            console.log('CF URL written to gist');
-          } catch(e) {}
-        });
-      }
+  // Download cloudflared in background
+  const dl = https.get('https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64', (res) => {
+    const file = fs.createWriteStream('/tmp/cloudflared');
+    res.pipe(file);
+    file.on('finish', () => {
+      file.close();
+      fs.chmodSync('/tmp/cloudflared', 0o755);
+      console.log('cloudflared downloaded');
+      
+      // Start tunnel
+      const cf = spawn('/tmp/cloudflared', ['tunnel', '--url', 'http://localhost:'+port], {stdio:['ignore','pipe','pipe']});
+      cf.stdout.on('data', d => {
+        const s = d.toString();
+        process.stdout.write(s);
+        const m = s.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+        if (m) {
+          const url = m[0];
+          console.log('CF URL:', url);
+          api('GET','/gists/'+gid).then(async g => {
+            try {
+              const state = JSON.parse(g.files.q.content);
+              state.url = url;
+              await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(state)}}});
+              console.log('CF URL written');
+            } catch(e) {}
+          });
+        }
+      });
+      cf.stderr.on('data', d => process.stderr.write(d));
+      cf.on('exit', c => console.log('cf exit:', c));
     });
-    cf.stderr.on('data', d => process.stderr.write(d));
-    cf.on('exit', c => console.log('cf exit:', c));
-  } catch(e) {
-    console.log('cf install err:', e.message);
-  }
+  });
+  dl.on('error', e => console.log('dl err:', e.message));
 });
