@@ -62,30 +62,29 @@ http.createServer((q,w) => {
 }).listen(port, '0.0.0.0', () => {
   console.log('relay on 0.0.0.0:'+port);
   
-  // cf already installed in workflow step
   const cfPath = '/tmp/cloudflared';
   if (fs.existsSync(cfPath)) {
-    const cf = spawn(cfPath, ['tunnel', '--url', 'http://localhost:'+port], {stdio:['ignore','pipe','pipe']});
-    cf.stdout.on('data', d => {
-      const s = d.toString();
-      process.stdout.write(s);
-      const m = s.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
-      if (m) {
-        const url = m[0];
-        console.log('CF URL:', url);
-        api('GET','/gists/'+gid).then(async g => {
-          try {
-            const state = JSON.parse(g.files.q.content);
-            state.url = url;
-            await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(state)}}});
-            console.log('CF URL written');
-          } catch(e) {}
-        });
-      }
-    });
-    cf.stderr.on('data', d => process.stderr.write(d));
-    cf.on('exit', c => console.log('cf exit:', c));
-  } else {
-    console.log('cloudflared not found at '+cfPath);
+    setTimeout(() => {
+      const cf = spawn(cfPath, ['tunnel', '--url', 'http://localhost:'+port], {stdio:['ignore','pipe','pipe']});
+      cf.stdout.on('data', d => {
+        const s = d.toString();
+        process.stdout.write(s);
+        const m = s.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+        if (m) {
+          const url = m[0];
+          console.log('CF URL:', url);
+          api('GET','/gists/'+gid).then(async g => {
+            try {
+              const state = JSON.parse(g.files.q.content);
+              state.url = url;
+              await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(state)}}});
+              console.log('CF URL written');
+            } catch(e) {}
+          });
+        }
+      });
+      cf.stderr.on('data', d => process.stderr.write(d));
+      cf.on('exit', c => console.log('cf exit:', c));
+    }, 500);
   }
 });
