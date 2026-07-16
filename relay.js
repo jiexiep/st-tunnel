@@ -1,7 +1,7 @@
 
 const http = require('http');
 const https = require('https');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const gid = process.env.GIST_ID;
 const tok = process.env.GH_TOKEN;
 const port = 8888;
@@ -17,29 +17,18 @@ function api(m, p, d) {
   });
 }
 
-// Pipeline: read entire gist, process, write entire gist
 async function tick() {
   try {
     const g = await api('GET','/gists/'+gid);
     const s = JSON.parse(g.files.q.content);
     let dirty = false;
-    
-    // Deliver responses
     for (const k of Object.keys(s)) {
       if (k.startsWith('resp_')) {
         const id = k.slice(5);
-        if (pending[id]) {
-          pending[id](s[k]);
-          delete pending[id];
-          delete s[k];
-          dirty = true;
-        }
+        if (pending[id]) { pending[id](s[k]); delete pending[id]; delete s[k]; dirty = true; }
       }
     }
-    
-    if (dirty) {
-      await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(s)}}});
-    }
+    if (dirty) await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(s)}}});
   } catch(e) {}
 }
 
@@ -52,20 +41,15 @@ http.createServer((q,w) => {
     const buf=Buffer.concat(b);
     const rd={method:q.method,path:q.url,headers:q.headers,body:buf.toString('base64')};
     console.log('REQ', q.method, q.url);
-    
     try {
-      // Read-modify-write in one shot
       const g = await api('GET','/gists/'+gid);
       const s = JSON.parse(g.files.q.content);
       s['req_'+id] = rd;
       await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(s)}}});
-      console.log('WRITTEN req_'+id);
-      
-      const r = await new Promise((res,rej) => {
+      const r = await new Promise((res) => {
         const to = setTimeout(() => res({code:504,headers:{},body:''}), 30000);
         pending[id] = (x) => { clearTimeout(to); res(x); };
       });
-      
       w.writeHead(r.code||502,r.headers||{});
       if (r.body) w.end(Buffer.from(r.body,'base64'));
       else w.end();
@@ -75,35 +59,36 @@ http.createServer((q,w) => {
       w.writeHead(502); w.end(e.message);
     }
   });
-}).listen(port, '0.0.0.0', () => {
+}).listen(port, '0.0.0.0', async () => {
   console.log('relay on 0.0.0.0:'+port);
   
-  // Start SSH tunnel
-  const ssh = spawn('ssh', [
-    '-o','StrictHostKeyChecking=no',
-    '-o','ServerAliveInterval=30',
-    '-o','ConnectTimeout=10',
-    '-R','80:localhost:'+port,
-    'serveo.net'
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
-  
-  ssh.stdout.on('data', d => {
-    const s = d.toString();
-    process.stdout.write(s);
-    const m = s.match(/https?:\/\/\S+[a-zA-Z0-9/]/);
-    if (m) {
-      const url = m[0].replace(/\/$/,'');
-      console.log('GOT URL:', url);
-      api('GET','/gists/'+gid).then(async g => {
-        try {
-          const state = JSON.parse(g.files.q.content);
-          state.url = url;
-          await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(state)}}});
-          console.log('URL written');
-        } catch(e) {}
-      });
-    }
-  });
-  ssh.stderr.on('data', d => process.stderr.write(d));
-  ssh.on('exit', c => console.log('SSH exit:', c));
+  // Install & run cloudflared
+  try {
+    execSync('which cloudflared || (curl -sL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared && chmod +x /tmp/cloudflared)', {stdio:'inherit', timeout:30000});
+    console.log('cloudflared ready');
+    
+    const cf = spawn('/tmp/cloudflared', ['tunnel', '--url', 'http://localhost:'+port], {stdio:['ignore','pipe','pipe']});
+    
+    cf.stdout.on('data', d => {
+      const s = d.toString();
+      process.stdout.write(s);
+      const m = s.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
+      if (m) {
+        const url = m[0];
+        console.log('CF URL:', url);
+        api('GET','/gists/'+gid).then(async g => {
+          try {
+            const state = JSON.parse(g.files.q.content);
+            state.url = url;
+            await api('PATCH','/gists/'+gid,{files:{q:{content:JSON.stringify(state)}}});
+            console.log('CF URL written to gist');
+          } catch(e) {}
+        });
+      }
+    });
+    cf.stderr.on('data', d => process.stderr.write(d));
+    cf.on('exit', c => console.log('cf exit:', c));
+  } catch(e) {
+    console.log('cf install err:', e.message);
+  }
 });
